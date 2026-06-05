@@ -1,36 +1,46 @@
-// Settings form. The user pastes ONE thing: their 7-day Refresh Token (from a
-// browser login). The extension uses it to mint short-lived access tokens and
-// rolls the refresh token forward automatically (the API rotates it each refresh).
+// Login settings. Email + password (defaults baked in for this personal build, so
+// it works with no typing). The extension logs in itself and auto-refreshes.
 import { SourceStateManager, DUISection } from '@paperback/types'
 
 export const STATE = {
-  REFRESH:    'refresh_token',  // keychain (secret) — the 7-day token, rotated on each refresh
-  ACCESS:     'access_token',   // keychain (secret) — the 15-min token, auto-minted
-  ACCESS_EXP: 'access_exp',     // plain (number, epoch ms) — when to refresh
+  EMAIL:      'email',          // plain — login email (default baked in interceptor)
+  PASSWORD:   'password',       // keychain (secret) — login password (default baked)
+  REFRESH:    'refresh_token',  // keychain — rotating 7-day token (obtained at runtime)
+  ACCESS:     'access_token',   // keychain — 15-min token (auto-minted)
+  ACCESS_EXP: 'access_exp',     // plain (number, epoch ms)
   SHOW_LOCKED:'show_locked',    // plain (bool)
-  DEBUG_REQ:  'debug_req',      // plain — last request auth state (for diagnostics)
-  DEBUG_RF:   'debug_rf'        // plain — last refresh outcome (for diagnostics)
+  DEBUG_REQ:  'debug_req',      // plain — diagnostics
+  DEBUG_RF:   'debug_rf'        // plain — diagnostics
+}
+
+async function clearTokens(sm: SourceStateManager): Promise<void> {
+  await sm.keychain.store(STATE.ACCESS, undefined)
+  await sm.keychain.store(STATE.REFRESH, undefined)
+  await sm.store(STATE.ACCESS_EXP, 0)
 }
 
 export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection> {
   return App.createDUISection({
     id: 'qimanhwa-settings',
-    header: 'QiManhwa Account',
+    header: 'QiManhwa Login',
     isHidden: false,
     rows: async () => [
 
-      // Paste your 7-day refreshToken here (see README for how to grab it).
-      App.createDUISecureInputField({
-        id: STATE.REFRESH,
-        label: 'Refresh Token',
+      App.createDUIInputField({
+        id: STATE.EMAIL,
+        label: 'Email',
         value: App.createDUIBinding({
-          get: async () => (await sm.keychain.retrieve(STATE.REFRESH)) as string ?? '',
-          set: async (v) => {
-            await sm.keychain.store(STATE.REFRESH, (v ?? '').trim())
-            // new refresh token -> force a fresh access token on next request
-            await sm.keychain.store(STATE.ACCESS, undefined)
-            await sm.store(STATE.ACCESS_EXP, 0)
-          }
+          get: async () => (await sm.retrieve(STATE.EMAIL)) as string ?? '',
+          set: async (v) => { await sm.store(STATE.EMAIL, (v ?? '').trim()); await clearTokens(sm) }
+        })
+      }),
+
+      App.createDUISecureInputField({
+        id: STATE.PASSWORD,
+        label: 'Password',
+        value: App.createDUIBinding({
+          get: async () => (await sm.keychain.retrieve(STATE.PASSWORD)) as string ?? '',
+          set: async (v) => { await sm.keychain.store(STATE.PASSWORD, (v ?? '').trim()); await clearTokens(sm) }
         })
       }),
 
@@ -44,13 +54,9 @@ export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection>
       }),
 
       App.createDUIButton({
-        id: 'logout',
-        label: 'Clear Login',
-        onTap: async () => {
-          await sm.keychain.store(STATE.REFRESH, undefined)
-          await sm.keychain.store(STATE.ACCESS, undefined)
-          await sm.store(STATE.ACCESS_EXP, 0)
-        }
+        id: 'relogin',
+        label: 'Re-login (clear saved tokens)',
+        onTap: async () => { await clearTokens(sm) }
       })
     ]
   })
