@@ -1,11 +1,13 @@
-// Settings form (getSourceMenu). Where the user pastes their site session cookie.
-// Secrets (the cookie) go to the keychain.
+// Settings form. The user pastes ONE thing: their 7-day Refresh Token (from a
+// browser login). The extension uses it to mint short-lived access tokens and
+// rolls the refresh token forward automatically (the API rotates it each refresh).
 import { SourceStateManager, DUISection } from '@paperback/types'
 
 export const STATE = {
-  SESSION_COOKIE: 'session_cookie',   // keychain (secret)
-  USER_AGENT:     'user_agent',        // plain (must match the UA that solved CF/login)
-  SHOW_LOCKED:    'show_locked'        // plain (bool)
+  REFRESH:    'refresh_token',  // keychain (secret) — the 7-day token, rotated on each refresh
+  ACCESS:     'access_token',   // keychain (secret) — the 15-min token, auto-minted
+  ACCESS_EXP: 'access_exp',     // plain (number, epoch ms) — when to refresh
+  SHOW_LOCKED:'show_locked'     // plain (bool)
 }
 
 export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection> {
@@ -15,27 +17,21 @@ export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection>
     isHidden: false,
     rows: async () => [
 
-      // Paste the qimanhwa SITE session cookie here (masked).
+      // Paste your 7-day refreshToken here (see README for how to grab it).
       App.createDUISecureInputField({
-        id: STATE.SESSION_COOKIE,
-        label: 'Session Cookie',
+        id: STATE.REFRESH,
+        label: 'Refresh Token',
         value: App.createDUIBinding({
-          get: async () => (await sm.keychain.retrieve(STATE.SESSION_COOKIE)) as string ?? '',
-          set: async (v) => { await sm.keychain.store(STATE.SESSION_COOKIE, (v ?? '').trim()) }
+          get: async () => (await sm.keychain.retrieve(STATE.REFRESH)) as string ?? '',
+          set: async (v) => {
+            await sm.keychain.store(STATE.REFRESH, (v ?? '').trim())
+            // new refresh token -> force a fresh access token on next request
+            await sm.keychain.store(STATE.ACCESS, undefined)
+            await sm.store(STATE.ACCESS_EXP, 0)
+          }
         })
       }),
 
-      // The UA the cookie was issued to (Cloudflare binds cf_clearance <-> UA).
-      App.createDUIInputField({
-        id: STATE.USER_AGENT,
-        label: 'Browser User-Agent',
-        value: App.createDUIBinding({
-          get: async () => (await sm.retrieve(STATE.USER_AGENT)) as string ?? '',
-          set: async (v) => { await sm.store(STATE.USER_AGENT, (v ?? '').trim()) }
-        })
-      }),
-
-      // Show coin-locked chapters in the list.
       App.createDUISwitch({
         id: STATE.SHOW_LOCKED,
         label: 'Show locked (premium) chapters',
@@ -47,13 +43,13 @@ export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection>
 
       App.createDUIButton({
         id: 'logout',
-        label: 'Clear Session',
-        onTap: async () => { await sm.keychain.store(STATE.SESSION_COOKIE, undefined) }
+        label: 'Clear Login',
+        onTap: async () => {
+          await sm.keychain.store(STATE.REFRESH, undefined)
+          await sm.keychain.store(STATE.ACCESS, undefined)
+          await sm.store(STATE.ACCESS_EXP, 0)
+        }
       })
-
-      // NOTE: deliberately NO App.createDUIOAuthButton. That primitive is for clean
-      // authorize+token API providers (Anilist/MAL). It CANNOT capture a site's own
-      // session cookie after Discord SSO. See README "Why Discord can't be automated".
     ]
   })
 }

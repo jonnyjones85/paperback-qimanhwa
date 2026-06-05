@@ -1,13 +1,33 @@
-// Attaches Cloudflare clearance + the site session cookie + required headers to
-// EVERY request, INCLUDING chapter image fetches. In Paperback 0.8 there is no
-// separate getImageRequest — all per-request mutation happens here.
-import { SourceInterceptor, Request, Response, SourceStateManager } from '@paperback/types'
+// Injects auth + required headers on EVERY request (incl. chapter images), and
+// AUTO-REFRESHES the access token using the stored refresh token.
+//
+// Auth model (reverse-engineered live from the qimanhwa Angular app):
+//   - api.qimanhwa.com reads the JWT from the `accessToken` cookie (15-min life).
+//   - When it expires, POST https://api.qimanhwa.com/api/v1/auth/refresh with the
+//     `refreshToken` cookie -> 200 {accessToken, refreshToken} in the BODY.
+//   - The refresh token ROTATES on every call, so we persist the new one each time.
+// The user pastes the refresh token once; the extension keeps the access token fresh.
+import { SourceInterceptor, Request, Response, SourceStateManager, RequestManager } from '@paperback/types'
 import { STATE } from './QiManhwaSettings'
 
 const BASE = 'https://qimanhwa.com'
+const API  = 'https://api.qimanhwa.com/api/v1'
+const ACCESS_TTL_MS = 14 * 60 * 1000   // refresh ~1 min before the 15-min token dies
 
 export class QiManhwaInterceptor implements SourceInterceptor {
+  // Set by the Source after construction — a SEPARATE manager for the refresh call
+  // so we never re-enter the main request queue from inside interceptRequest.
+  authManager!: RequestManager
+  private refreshing?: Promise<void>
+
   constructor(private sm: SourceStateManager) {}
+
+  private addCookie(request: Request, cookie: string): void {
+    const headers = (request.headers ?? {}) as Record<string, string>
+    const existing = headers['Cookie'] ?? headers['cookie'] ?? ''
+    headers['Cookie'] = existing ? `${existing}; ${cookie}` : cookie
+    request.headers = headers
+  }
 
   async interceptRequest(request: Request): Promise<Request> {
     request.headers = {
@@ -20,20 +40,61 @@ export class QiManhwaInterceptor implements SourceInterceptor {
       'Sec-Fetch-Site': 'same-site'
     }
 
-    // UA must match the browser that logged in / solved Cloudflare.
-    const ua = (await this.sm.retrieve(STATE.USER_AGENT)) as string
-    if (ua) request.headers['User-Agent'] = ua
+    // The refresh call itself: attach the refresh token, do NOT try to refresh again.
+    if (request.url.includes('/auth/refresh')) {
+      const rt = (await this.sm.keychain.retrieve(STATE.REFRESH)) as string
+      if (rt) this.addCookie(request, `refreshToken=${rt}`)
+      return request
+    }
 
-    // Inject the site session cookie on every request (pages list + images).
-    const cookie = (await this.sm.keychain.retrieve(STATE.SESSION_COOKIE)) as string
-    if (cookie) {
-      const existing = request.headers['Cookie'] ?? request.headers['cookie'] ?? ''
-      request.headers['Cookie'] = existing ? `${existing}; ${cookie}` : cookie
+    // Any API request: ensure a valid access token, then attach it.
+    if (request.url.includes('api.qimanhwa.com')) {
+      const rt = (await this.sm.keychain.retrieve(STATE.REFRESH)) as string
+      if (rt) {
+        let at = (await this.sm.keychain.retrieve(STATE.ACCESS)) as string
+        const exp = (await this.sm.retrieve(STATE.ACCESS_EXP)) as number ?? 0
+        if (!at || Date.now() >= exp) {
+          await this.ensureRefresh()
+          at = (await this.sm.keychain.retrieve(STATE.ACCESS)) as string
+        }
+        if (at) this.addCookie(request, `accessToken=${at}`)
+      }
     }
     return request
   }
 
   async interceptResponse(response: Response): Promise<Response> {
-    return response   // no-op; could detect a login-page HTML body on a JSON route to warn of expiry
+    return response
+  }
+
+  // Single-flight: many parallel requests share one refresh.
+  private ensureRefresh(): Promise<void> {
+    if (!this.refreshing) {
+      this.refreshing = this.doRefresh().then(
+        () => { this.refreshing = undefined },
+        (e) => { this.refreshing = undefined; throw e }
+      )
+    }
+    return this.refreshing
+  }
+
+  private async doRefresh(): Promise<void> {
+    const rt = (await this.sm.keychain.retrieve(STATE.REFRESH)) as string
+    if (!rt) return
+    const req = App.createRequest({ url: `${API}/auth/refresh`, method: 'POST' })
+    const res = await this.authManager.schedule(req, 1)
+    if (res.status >= 200 && res.status < 300) {
+      const j = JSON.parse(res.data ?? '{}')
+      if (j.accessToken) await this.sm.keychain.store(STATE.ACCESS, j.accessToken)
+      if (j.refreshToken) await this.sm.keychain.store(STATE.REFRESH, j.refreshToken) // rotation
+      await this.sm.store(STATE.ACCESS_EXP, Date.now() + ACCESS_TTL_MS)
+    } else {
+      // refresh token expired/invalid -> wipe so the user knows to re-paste
+      await this.sm.keychain.store(STATE.ACCESS, undefined)
+      await this.sm.store(STATE.ACCESS_EXP, 0)
+      throw new Error(
+        `QiManhwa: token refresh failed (HTTP ${res.status}). Your Refresh Token expired — ` +
+        `log in again on qimanhwa.com and paste a fresh Refresh Token in this source's Settings.`)
+    }
   }
 }

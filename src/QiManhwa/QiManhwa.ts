@@ -1,8 +1,8 @@
 // QiManhwa — Paperback 0.8 source for qimanhwa.com (EZManhwa JSON-API platform).
 // All data is JSON from api.qimanhwa.com/api/v1 — no HTML scraping.
-// Free browse/search/series/free-chapters need no login; premium (coin-locked)
-// chapters need a site session cookie pasted in Settings (see README — Discord
-// login cannot be automated by an extension).
+// Free browse/search/series/free-chapters need no login. Premium (coin-locked)
+// chapters: paste your refresh token once in Settings — the interceptor auto-mints
+// and rotates the short-lived access token (see QiManhwaInterceptor.ts).
 
 import {
   SourceInfo, ContentRating, SourceIntents,
@@ -24,12 +24,12 @@ const BASE = 'https://qimanhwa.com'
 const API  = 'https://api.qimanhwa.com/api/v1'
 
 export const QiManhwaInfo: SourceInfo = {
-  version: '1.0.0',
+  version: '1.1.0',
   name: 'QiManhwa',
   icon: 'icon.png',
   author: 'Kele',
   authorWebsite: '',
-  description: 'QiManhwa (EZManhwa platform). Free chapters open; premium chapters need a pasted session cookie.',
+  description: 'QiManhwa (EZManhwa platform). Free chapters open; premium unlocks by pasting your refresh token once (auto-refreshes).',
   contentRating: ContentRating.MATURE,
   websiteBaseURL: BASE,
   intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.SETTINGS_UI | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
@@ -38,11 +38,23 @@ export const QiManhwaInfo: SourceInfo = {
 export class QiManhwa implements PaperbackExtensionBase {
   stateManager: SourceStateManager = App.createSourceStateManager()
 
+  private interceptor = new QiManhwaInterceptor(this.stateManager)
+
   requestManager: RequestManager = App.createRequestManager({
     requestsPerSecond: 2,          // EZManhwa family rate-limits ~2 req/s
     requestTimeout: 20000,
-    interceptor: new QiManhwaInterceptor(this.stateManager)
+    interceptor: this.interceptor
   })
+
+  constructor() {
+    // Separate manager for the token-refresh POST (shares the interceptor for
+    // headers, but avoids re-entering the main queue from inside interceptRequest).
+    this.interceptor.authManager = App.createRequestManager({
+      requestsPerSecond: 2,
+      requestTimeout: 20000,
+      interceptor: this.interceptor
+    })
+  }
 
   private async getJSON<T>(url: string): Promise<T> {
     const req = App.createRequest({ url, method: 'GET' })
@@ -76,8 +88,8 @@ export class QiManhwa implements PaperbackExtensionBase {
     const data = await this.getJSON<QiPageList>(`${API}/${chapterId}`)
     if (data.requiresPurchase || !data.images || data.images.length === 0) {
       throw new Error(
-        'This chapter requires purchase (coin-locked). Log in on qimanhwa.com, ' +
-        'unlock it, and make sure your session cookie is pasted in this source’s Settings.')
+        'This chapter is coin-locked and not unlocked on your account. Unlock it on qimanhwa.com, ' +
+        'and make sure your Refresh Token is set in this source’s Settings.')
     }
     return parsePageList(mangaId, chapterId, data)
   }
