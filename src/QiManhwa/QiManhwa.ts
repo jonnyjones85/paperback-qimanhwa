@@ -24,12 +24,12 @@ const BASE = 'https://qimanhwa.com'
 const API  = 'https://api.qimanhwa.com/api/v1'
 
 export const QiManhwaInfo: SourceInfo = {
-  version: '1.2.0',
+  version: '1.3.0',
   name: 'QiManhwa',
   icon: 'icon.png',
   author: 'Kele',
   authorWebsite: '',
-  description: 'QiManhwa (EZManhwa platform). Personal build — login token baked in and auto-refreshed; free + premium chapters open with no setup.',
+  description: 'QiManhwa (EZManhwa platform). Personal build — token baked in, Bearer auth + auto-refresh; free + owned premium chapters open with no setup.',
   contentRating: ContentRating.MATURE,
   websiteBaseURL: BASE,
   intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.SETTINGS_UI | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
@@ -86,10 +86,12 @@ export class QiManhwa implements PaperbackExtensionBase {
   async getChapterDetails(mangaId: string, chapterId: string): Promise<ChapterDetails> {
     // chapterId canonical form = "series/{seriesSlug}/chapters/{chapterSlug}"
     const data = await this.getJSON<QiPageList>(`${API}/${chapterId}`)
-    if (data.requiresPurchase || !data.images || data.images.length === 0) {
+    // Serve whenever images are present — an OWNED premium chapter returns
+    // requiresPurchase:true with images, so only bail when there are no images.
+    if (!data.images || data.images.length === 0) {
       throw new Error(
-        'This chapter is coin-locked and not unlocked on your account. Unlock it on qimanhwa.com, ' +
-        'and make sure your Refresh Token is set in this source’s Settings.')
+        'This chapter is locked (not unlocked on your account, or the login token lapsed). ' +
+        'Buy it on qimanhwa.com, or ask for a fresh build if you own it and it still won’t open.')
     }
     return parsePageList(mangaId, chapterId, data)
   }
