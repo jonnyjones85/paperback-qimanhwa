@@ -1,7 +1,7 @@
 {
   "name": "extensions-default",
   "version": "1.0.0",
-  "repositoryName": "Default Extensions",
+  "repositoryName": "QiManhwa",
   "description": "Default extensions for Paperback 0.8",
   "main": "lib/index.js",
   "scripts": {
