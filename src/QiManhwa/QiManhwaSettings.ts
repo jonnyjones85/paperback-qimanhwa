@@ -7,7 +7,9 @@ export const STATE = {
   REFRESH:    'refresh_token',  // keychain (secret) — the 7-day token, rotated on each refresh
   ACCESS:     'access_token',   // keychain (secret) — the 15-min token, auto-minted
   ACCESS_EXP: 'access_exp',     // plain (number, epoch ms) — when to refresh
-  SHOW_LOCKED:'show_locked'     // plain (bool)
+  SHOW_LOCKED:'show_locked',    // plain (bool)
+  DEBUG_REQ:  'debug_req',      // plain — last request auth state (for diagnostics)
+  DEBUG_RF:   'debug_rf'        // plain — last refresh outcome (for diagnostics)
 }
 
 export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection> {

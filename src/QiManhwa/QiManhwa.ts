@@ -24,12 +24,12 @@ const BASE = 'https://qimanhwa.com'
 const API  = 'https://api.qimanhwa.com/api/v1'
 
 export const QiManhwaInfo: SourceInfo = {
-  version: '1.3.0',
+  version: '1.4.0',
   name: 'QiManhwa',
   icon: 'icon.png',
   author: 'Kele',
   authorWebsite: '',
-  description: 'QiManhwa (EZManhwa platform). Personal build — token baked in, Bearer auth + auto-refresh; free + owned premium chapters open with no setup.',
+  description: 'QiManhwa (EZManhwa platform). Personal build — fresh token, Bearer auth + auto-refresh, with on-error auth diagnostics.',
   contentRating: ContentRating.MATURE,
   websiteBaseURL: BASE,
   intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.SETTINGS_UI | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
@@ -89,9 +89,9 @@ export class QiManhwa implements PaperbackExtensionBase {
     // Serve whenever images are present — an OWNED premium chapter returns
     // requiresPurchase:true with images, so only bail when there are no images.
     if (!data.images || data.images.length === 0) {
-      throw new Error(
-        'This chapter is locked (not unlocked on your account, or the login token lapsed). ' +
-        'Buy it on qimanhwa.com, or ask for a fresh build if you own it and it still won’t open.')
+      const dq = (await this.stateManager.retrieve(STATE.DEBUG_REQ)) as string ?? '?'
+      const df = (await this.stateManager.retrieve(STATE.DEBUG_RF)) as string ?? '?'
+      throw new Error(`Locked / no images. [diag req:${dq} | rf:${df} | reqPurchase:${data.requiresPurchase}]`)
     }
     return parsePageList(mangaId, chapterId, data)
   }
