@@ -24,12 +24,12 @@ const BASE = 'https://qimanhwa.com'
 const API  = 'https://api.qimanhwa.com/api/v1'
 
 export const QiManhwaInfo: SourceInfo = {
-  version: '1.1.0',
+  version: '1.2.0',
   name: 'QiManhwa',
   icon: 'icon.png',
   author: 'Kele',
   authorWebsite: '',
-  description: 'QiManhwa (EZManhwa platform). Free chapters open; premium unlocks by pasting your refresh token once (auto-refreshes).',
+  description: 'QiManhwa (EZManhwa platform). Personal build — login token baked in and auto-refreshed; free + premium chapters open with no setup.',
   contentRating: ContentRating.MATURE,
   websiteBaseURL: BASE,
   intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.SETTINGS_UI | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
