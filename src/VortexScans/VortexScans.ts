@@ -26,7 +26,7 @@ const API  = 'https://api.vortexscans.org'
 const PER_PAGE = 18
 
 export const VortexScansInfo: SourceInfo = {
-  version: '1.0.0',
+  version: '1.0.1',
   name: 'Vortex Scans',
   icon: 'icon.png',
   author: 'Kele',
@@ -124,7 +124,8 @@ export class VortexScans implements PaperbackExtensionBase {
   getMangaShareUrl(mangaId: string): string { return `${BASE}/series/${mangaIdToSlug(mangaId)}` }
 
   async getCloudflareBypassRequestAsync(): Promise<Request> {
-    return App.createRequest({ url: BASE, method: 'GET' })
+    // Content lives on api.vortexscans.org, so solve Cloudflare for that host.
+    return App.createRequest({ url: `${API}/api/query?page=1&perPage=1&searchTerm=`, method: 'GET' })
   }
 
   async getSourceMenu(): Promise<DUISection> { return getSourceMenu(this.stateManager) }
