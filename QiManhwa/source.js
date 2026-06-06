@@ -473,7 +473,7 @@ const QiManhwaParser_1 = require("./QiManhwaParser");
 const BASE = 'https://qimanhwa.com';
 const API = 'https://api.qimanhwa.com/api/v1';
 exports.QiManhwaInfo = {
-    version: '1.5.0',
+    version: '1.5.1',
     name: 'QiManhwa',
     icon: 'icon.png',
     author: 'Kele',
@@ -566,7 +566,9 @@ class QiManhwa {
     }
     getMangaShareUrl(mangaId) { return `${BASE}/series/${mangaId}`; }
     async getCloudflareBypassRequestAsync() {
-        return App.createRequest({ url: BASE, method: 'GET' });
+        // Content lives entirely on api.qimanhwa.com, so solve Cloudflare for THAT
+        // host (cf_clearance is per-host) — not the main site.
+        return App.createRequest({ url: `${API}/series?page=1&perPage=1&sort=popular`, method: 'GET' });
     }
     async getSourceMenu() { return (0, QiManhwaSettings_1.getSourceMenu)(this.stateManager); }
 }

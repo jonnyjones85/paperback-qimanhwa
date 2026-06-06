@@ -475,7 +475,7 @@ const BASE = 'https://vortexscans.org';
 const API = 'https://api.vortexscans.org';
 const PER_PAGE = 18;
 exports.VortexScansInfo = {
-    version: '1.0.0',
+    version: '1.0.1',
     name: 'Vortex Scans',
     icon: 'icon.png',
     author: 'Kele',
@@ -564,7 +564,8 @@ class VortexScans {
     }
     getMangaShareUrl(mangaId) { return `${BASE}/series/${(0, VortexScansParser_1.mangaIdToSlug)(mangaId)}`; }
     async getCloudflareBypassRequestAsync() {
-        return App.createRequest({ url: BASE, method: 'GET' });
+        // Content lives on api.vortexscans.org, so solve Cloudflare for that host.
+        return App.createRequest({ url: `${API}/api/query?page=1&perPage=1&searchTerm=`, method: 'GET' });
     }
     async getSourceMenu() { return (0, VortexScansSettings_1.getSourceMenu)(this.stateManager); }
 }
