@@ -24,12 +24,9 @@ export class QiManhwaInterceptor implements SourceInterceptor {
   constructor(private sm: SourceStateManager) {}
 
   private async creds(): Promise<{ email: string; password: string }> {
-    const e = (await this.sm.retrieve(STATE.EMAIL)) as string
-    const p = (await this.sm.keychain.retrieve(STATE.PASSWORD)) as string
-    return {
-      email:    (e && e.length) ? e : SEED_EMAIL,
-      password: (p && p.length) ? p : SEED_PASSWORD
-    }
+    // Single baked-in account, no Settings override (removed — a saved override
+    // used to silently shadow this working login and break it).
+    return { email: SEED_EMAIL, password: SEED_PASSWORD }
   }
 
   private async currentRefresh(): Promise<string> {

@@ -24,7 +24,7 @@ const BASE = 'https://qimanhwa.com'
 const API  = 'https://api.qimanhwa.com/api/v1'
 
 export const QiManhwaInfo: SourceInfo = {
-  version: '1.5.1',
+  version: '1.5.2',
   name: 'QiManhwa',
   icon: 'icon.png',
   author: 'Kele',

@@ -1,10 +1,13 @@
-// Login settings. Email + password (defaults baked in for this personal build, so
-// it works with no typing). The extension logs in itself and auto-refreshes.
+// Settings. The account login is baked into the interceptor (single personal
+// account, self-healing, no captcha), so there is intentionally NO email/password
+// override field — a saved override used to silently shadow the working baked login
+// and break it. Re-login just wipes tokens (and any legacy saved override) so the
+// next request re-authenticates with the baked credentials.
 import { SourceStateManager, DUISection } from '@paperback/types'
 
 export const STATE = {
-  EMAIL:      'email',          // plain — login email (default baked in interceptor)
-  PASSWORD:   'password',       // keychain (secret) — login password (default baked)
+  EMAIL:      'email',          // legacy key — no longer used/read; wiped on re-login
+  PASSWORD:   'password',       // legacy key — no longer used/read; wiped on re-login
   REFRESH:    'refresh_token',  // keychain — rotating 7-day token (obtained at runtime)
   ACCESS:     'access_token',   // keychain — 15-min token (auto-minted)
   ACCESS_EXP: 'access_exp',     // plain (number, epoch ms)
@@ -13,36 +16,22 @@ export const STATE = {
   DEBUG_RF:   'debug_rf'        // plain — diagnostics
 }
 
-async function clearTokens(sm: SourceStateManager): Promise<void> {
+async function resetAuth(sm: SourceStateManager): Promise<void> {
   await sm.keychain.store(STATE.ACCESS, undefined)
   await sm.keychain.store(STATE.REFRESH, undefined)
   await sm.store(STATE.ACCESS_EXP, 0)
+  // Wipe any legacy email/password override that may have been saved before the
+  // fields were removed (those would otherwise have to be cleared by hand).
+  await sm.store(STATE.EMAIL, undefined)
+  await sm.keychain.store(STATE.PASSWORD, undefined)
 }
 
 export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection> {
   return App.createDUISection({
     id: 'qimanhwa-settings',
-    header: 'QiManhwa Login',
+    header: 'QiManhwa',
     isHidden: false,
     rows: async () => [
-
-      App.createDUIInputField({
-        id: STATE.EMAIL,
-        label: 'Email',
-        value: App.createDUIBinding({
-          get: async () => (await sm.retrieve(STATE.EMAIL)) as string ?? '',
-          set: async (v) => { await sm.store(STATE.EMAIL, (v ?? '').trim()); await clearTokens(sm) }
-        })
-      }),
-
-      App.createDUISecureInputField({
-        id: STATE.PASSWORD,
-        label: 'Password',
-        value: App.createDUIBinding({
-          get: async () => (await sm.keychain.retrieve(STATE.PASSWORD)) as string ?? '',
-          set: async (v) => { await sm.keychain.store(STATE.PASSWORD, (v ?? '').trim()); await clearTokens(sm) }
-        })
-      }),
 
       App.createDUISwitch({
         id: STATE.SHOW_LOCKED,
@@ -55,8 +44,8 @@ export async function getSourceMenu(sm: SourceStateManager): Promise<DUISection>
 
       App.createDUIButton({
         id: 'relogin',
-        label: 'Re-login (clear saved tokens)',
-        onTap: async () => { await clearTokens(sm) }
+        label: 'Re-login (reset to built-in account)',
+        onTap: async () => { await resetAuth(sm) }
       })
     ]
   })
