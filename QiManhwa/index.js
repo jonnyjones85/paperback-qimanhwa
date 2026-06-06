@@ -473,7 +473,7 @@ const QiManhwaParser_1 = require("./QiManhwaParser");
 const BASE = 'https://qimanhwa.com';
 const API = 'https://api.qimanhwa.com/api/v1';
 exports.QiManhwaInfo = {
-    version: '1.5.1',
+    version: '1.5.2',
     name: 'QiManhwa',
     icon: 'icon.png',
     author: 'Kele',
@@ -590,12 +590,9 @@ class QiManhwaInterceptor {
         this.sm = sm;
     }
     async creds() {
-        const e = (await this.sm.retrieve(QiManhwaSettings_1.STATE.EMAIL));
-        const p = (await this.sm.keychain.retrieve(QiManhwaSettings_1.STATE.PASSWORD));
-        return {
-            email: (e && e.length) ? e : SEED_EMAIL,
-            password: (p && p.length) ? p : SEED_PASSWORD
-        };
+        // Single baked-in account, no Settings override (removed — a saved override
+        // used to silently shadow this working login and break it).
+        return { email: SEED_EMAIL, password: SEED_PASSWORD };
     }
     async currentRefresh() {
         return (await this.sm.keychain.retrieve(QiManhwaSettings_1.STATE.REFRESH)) ?? '';
@@ -789,33 +786,21 @@ exports.STATE = {
     DEBUG_REQ: 'debug_req',
     DEBUG_RF: 'debug_rf' // plain — diagnostics
 };
-async function clearTokens(sm) {
+async function resetAuth(sm) {
     await sm.keychain.store(exports.STATE.ACCESS, undefined);
     await sm.keychain.store(exports.STATE.REFRESH, undefined);
     await sm.store(exports.STATE.ACCESS_EXP, 0);
+    // Wipe any legacy email/password override that may have been saved before the
+    // fields were removed (those would otherwise have to be cleared by hand).
+    await sm.store(exports.STATE.EMAIL, undefined);
+    await sm.keychain.store(exports.STATE.PASSWORD, undefined);
 }
 async function getSourceMenu(sm) {
     return App.createDUISection({
         id: 'qimanhwa-settings',
-        header: 'QiManhwa Login',
+        header: 'QiManhwa',
         isHidden: false,
         rows: async () => [
-            App.createDUIInputField({
-                id: exports.STATE.EMAIL,
-                label: 'Email',
-                value: App.createDUIBinding({
-                    get: async () => (await sm.retrieve(exports.STATE.EMAIL)) ?? '',
-                    set: async (v) => { await sm.store(exports.STATE.EMAIL, (v ?? '').trim()); await clearTokens(sm); }
-                })
-            }),
-            App.createDUISecureInputField({
-                id: exports.STATE.PASSWORD,
-                label: 'Password',
-                value: App.createDUIBinding({
-                    get: async () => (await sm.keychain.retrieve(exports.STATE.PASSWORD)) ?? '',
-                    set: async (v) => { await sm.keychain.store(exports.STATE.PASSWORD, (v ?? '').trim()); await clearTokens(sm); }
-                })
-            }),
             App.createDUISwitch({
                 id: exports.STATE.SHOW_LOCKED,
                 label: 'Show locked (premium) chapters',
@@ -826,8 +811,8 @@ async function getSourceMenu(sm) {
             }),
             App.createDUIButton({
                 id: 'relogin',
-                label: 'Re-login (clear saved tokens)',
-                onTap: async () => { await clearTokens(sm); }
+                label: 'Re-login (reset to built-in account)',
+                onTap: async () => { await resetAuth(sm); }
             })
         ]
     });
